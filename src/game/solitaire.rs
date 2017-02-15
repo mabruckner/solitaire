@@ -230,39 +230,67 @@ pub struct CardGamePercept {
 }
 
 impl Renderable for CardGamePercept {
-    type CardId = (StackId, usize);
+    type CardId = (StackId, Option<usize>);
+    type Action = CardGameAction;
     fn get_cards(&self) -> Vec<Self::CardId> {
         let mut out = Vec::new();
         for (k, val) in self.stacks.iter() {
+            out.push((k.clone(), None));
             for i in 0..val.len() {
-                out.push((k.clone(), i));
+                out.push((k.clone(), Some(i)));
             }
         }
         out
     }
     fn get_data_for(&self, id: Self::CardId) -> Option<CardData<Self::CardId>> {
         if let Some(stack) = self.stacks.get(&id.0) {
-            if let Some(val) = stack.get(id.1) {
+            if let Some(idx) = id.1 {
+            if let Some(val) = stack.get(idx) {
                 let mut children = Vec::new();
                 if val.is_some() && (id.0).0 == 1 {
-                    for i in (id.1+1)..stack.len() {
-                        children.push((id.0.clone(), i));
+                    for i in (idx+1)..stack.len() {
+                        children.push((id.0.clone(), Some(i)));
                     }
                 }
                 let draggable = children.len() > 0 || match id.0 {
-                    StackId(0,1) | StackId(1, _) => id.1 == stack.len() - 1,
+                    StackId(0,1) | StackId(1, _) => idx == stack.len() - 1,
                     _ => false
                 };
                 Some(CardData {
-                    pos: [(id.0).1 as f64, (id.0).0 as f64, id.1 as f64],
+                    pos: [(id.0).1 as f64, (id.0).0 as f64, idx as f64],
                     display: val.clone(),
                     drag_children: if draggable { Some(children) } else { None }
                 })
+                } else {
+                    None
+                }
             } else {
-                None
+                Some(CardData {
+                    pos: [(id.0).1 as f64, (id.0).0 as f64, -0.01],
+                    display: None,
+                    drag_children: None
+                })
             }
         } else {
             None
+        }
+    }
+    fn get_action_for(&self, act: MouseAction<Self::CardId>) -> Option<Self::Action> {
+        match act {
+            MouseAction::Drop(dragged, (stack, _)) => {
+                if let Some(data) = self.get_data_for(dragged) {
+                    if let Some(crd) = data.display {
+                        Some(CardGameAction::Move(crd, stack))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            },
+            MouseAction::Tap((stack, _)) => {
+                Some(CardGameAction::Tap(stack))
+            }
         }
     }
 }

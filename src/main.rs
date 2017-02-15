@@ -41,7 +41,10 @@ use amethyst::specs::{
 };
 
 use game::problem::Problem;
-use game::render::Renderable as SRenderable;
+use game::render::{
+    MouseAction,
+    Renderable as SRenderable
+};
 
 struct CameraSystem;
 
@@ -135,6 +138,35 @@ struct Test {
 }
 
 impl Test {
+    fn refresh(&mut self, asset_manager: &mut AssetManager, world: &mut World) {
+        {
+            let cards = world.read::<CardThing>();
+            for ent in world.entities().iter() {
+                if cards.get(ent).is_some() {
+                    world.delete_later(ent);
+                }
+            }
+        }
+        let cardbase = asset_manager.create_renderable("card", "cards/card_10_roads", "white", "white", 1.0).unwrap();
+
+        for card in self.state.percept().get_cards() {
+            world.create_now()
+                .with(cardbase.clone())
+                .with(CardThing{ card: card.clone()})
+                .with(LocalTransform::default())
+                .with(Transform::default())
+                .build();
+        }
+
+    }
+    fn do_thing(&mut self, act: game::solitaire::CardGameAction, asset_manager: &mut AssetManager, world: &mut World) {
+        println!("{:?}", act);
+        let actions = self.state.actions();
+        if actions.contains(&act) {
+            self.state = self.state.result(act);
+            self.refresh(asset_manager, world);
+        }
+    }
     fn ren_to_world(&self, pos: &[f64; 3]) -> [f32; 3] {
         [(pos[0] as f32)*self.spacing[0], (pos[1] as f32)*self.spacing[1], (pos[2] as f32)*self.spacing[2]]
     }
@@ -153,29 +185,27 @@ impl Test {
             },
             _ => ()
         }
-        println!("{:?}", self.mouse);
-
     }
-    fn mouse_event(&mut self, evt: Event, world: &mut World) {
+    fn mouse_event(&mut self, evt: Event, asset_manager: &mut AssetManager, world: &mut World) {
         match evt {
             Event::MouseMoved(x, y) => {
                 if let Some(ref card) = self.drag {
-                let percept = self.state.percept();
-                let data = percept.get_data_for(card.clone()).unwrap();
-                if let Some(ref children) = data.drag_children {
-                    let base = self.ren_to_world(&data.pos);
-                    let offset = [(x as f32)/10.0, (y as f32)/10.0, 0.0];
-                    for (subject, mut transform) in (&world.read::<CardThing>(), &mut world.write::<LocalTransform>()).iter() {
-                        if &subject.card == card || children.contains(&subject.card) {
-                            let mut local = self.ren_to_world(&percept.get_data_for(subject.card.clone()).unwrap().pos);
-                            for i in 0..3 {
-                                local[i] = local[i] - base[i] + offset[i];
+                    let percept = self.state.percept();
+                    let data = percept.get_data_for(card.clone()).unwrap();
+                    if let Some(ref children) = data.drag_children {
+                        let base = self.ren_to_world(&data.pos);
+                        let offset = [(x as f32)/10.0, (y as f32)/10.0, 0.0];
+                        for (subject, mut transform) in (&world.read::<CardThing>(), &mut world.write::<LocalTransform>()).iter() {
+                            if &subject.card == card || children.contains(&subject.card) {
+                                let mut local = self.ren_to_world(&percept.get_data_for(subject.card.clone()).unwrap().pos);
+                                for i in 0..3 {
+                                    local[i] = local[i] - base[i] + offset[i];
+                                }
+                                transform.translation = local;
                             }
-                            transform.translation = local;
                         }
                     }
                 }
-            }
             },
             Event::MouseInput(state, amethyst::event::MouseButton::Left) => {
                 let mut ignore = Vec::new();
@@ -212,6 +242,14 @@ impl Test {
                         if percept.get_data_for(target.clone()).unwrap().drag_children.is_some() {
                             self.drag = Some(target);
                         }
+                    } else {
+                        if let Some(action) = percept.get_action_for(if let Some(ref drag) = self.drag {
+                            game::render::MouseAction::Drop(drag.clone(), target)
+                        } else {
+                            game::render::MouseAction::Tap(target)
+                        }) {
+                            self.do_thing(action, asset_manager, world);
+                        }
                     }
                 }
                 if state == amethyst::event::ElementState::Released {
@@ -246,8 +284,8 @@ impl State for Test {
                 right: 5.0 * aspect,
                 bottom: -5.0,
                 top: 5.0,
-                near: -5.0,
-                far: 5.0,
+                near: -40.0,
+                far: 40.0,
             };
 
             camera.projection = projection;
@@ -274,17 +312,13 @@ impl State for Test {
         let tri = asset_manager.create_renderable("card", "cards/card_10_clubs", "white", "white", 1.0).unwrap();
         //asset_manager.load_asset_from_data::<Texture, [f32; 4]>("white", [1.0, 1.0, 1.0, 1.0]);
         
-        for (i, &count) in [2, 7, 4].iter().enumerate() {
-            for j in 0..count {
-                for k in 0..10 {
+        for card in self.state.percept().get_cards() {
                     world.create_now()
                         .with(tri.clone())
-                        .with(CardThing{ card: (game::solitaire::StackId(i, j), k)})
+                        .with(CardThing{ card: card.clone()})
                         .with(LocalTransform::default())
                         .with(Transform::default())
                         .build();
-                }
-            }
         }
 
         world.create_now()
@@ -334,15 +368,14 @@ impl State for Test {
         }
         Trans::None
     }
-    fn handle_events(&mut self, events: &[WindowEvent], world: &mut World, _: &mut AssetManager, _: &mut Pipeline) -> Trans {
+    fn handle_events(&mut self, events: &[WindowEvent], world: &mut World, asset_manager: &mut AssetManager, _: &mut Pipeline) -> Trans {
         for event in events {
-            println!("{:?}", event.payload);
             match event.payload {
                 Event::Closed | Event::KeyboardInput(_, _, Some(VirtualKeyCode::Escape)) => {
                     return Trans::Quit;
                 },
                 Event::MouseMoved(x, y) => self.mouse_moved(x as f32, y as f32, world),
-                Event::MouseInput(_, _) => self.mouse_event(event.payload.clone(), world),
+                Event::MouseInput(_, _) => self.mouse_event(event.payload.clone(), asset_manager, world),
                 _ => ()
             }
         }
