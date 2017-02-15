@@ -1,0 +1,8 @@
+title: "Solitaire"
+fullscreen: false
+dimensions: null
+max_dimensions: null
+min_dimensions: null
+vsync: true
+multisampling: 1
+visibility: true
