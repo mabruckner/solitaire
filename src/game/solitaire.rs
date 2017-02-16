@@ -245,22 +245,22 @@ impl Renderable for CardGamePercept {
     fn get_data_for(&self, id: Self::CardId) -> Option<CardData<Self::CardId>> {
         if let Some(stack) = self.stacks.get(&id.0) {
             if let Some(idx) = id.1 {
-            if let Some(val) = stack.get(idx) {
-                let mut children = Vec::new();
-                if val.is_some() && (id.0).0 == 1 {
-                    for i in (idx+1)..stack.len() {
-                        children.push((id.0.clone(), Some(i)));
+                if let Some(val) = stack.get(idx) {
+                    let mut children = Vec::new();
+                    if val.is_some() && (id.0).0 == 1 {
+                        for i in (idx+1)..stack.len() {
+                            children.push((id.0.clone(), Some(i)));
+                        }
                     }
-                }
-                let draggable = children.len() > 0 || match id.0 {
-                    StackId(0,1) | StackId(1, _) => idx == stack.len() - 1,
-                    _ => false
-                };
-                Some(CardData {
-                    pos: [(id.0).1 as f64, (id.0).0 as f64, idx as f64],
-                    display: val.clone(),
-                    drag_children: if draggable { Some(children) } else { None }
-                })
+                    let draggable = children.len() > 0 || match id.0 {
+                        StackId(0,1) | StackId(1, _) => idx == stack.len() - 1,
+                        _ => false
+                    };
+                    Some(CardData {
+                        pos: [(id.0).1 as f64, (id.0).0 as f64 - (idx as f64* 0.05), idx as f64 * 0.01],
+                        display: val.clone(),
+                        drag_children: if draggable { Some(children) } else { None }
+                    })
                 } else {
                     None
                 }

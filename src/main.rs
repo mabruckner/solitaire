@@ -60,7 +60,7 @@ impl System<()> for CameraSystem {
 
 
         let aspect = dimensions.aspect_ratio;
-        let eye = [5.0, 0.1, 1.0];
+        let eye = [5.0, 0.0, 1.0];
         let target = [5.0, 0.0, 0.0];
         let up = [0.0, 1.0, 0.0];
 
@@ -338,9 +338,9 @@ impl State for Test {
             dragging.push(card.clone());
             let mut data = percept.get_data_for(card).unwrap();
             let pos = self.ren_to_world(&data.pos);
-            let mouse = [self.mouse.0, self.mouse.1, 0.0];
-            for i in 0..2 {
-                drag_offset[i] = mouse[i] - (pos[i] as f32);
+            let mouse = [self.mouse.0, self.mouse.1, 1.0];
+            for i in 0..3 {
+                drag_offset[i] = mouse[i] - pos[i];
             }
             if let Some(mut children) = data.drag_children {
                 for child in children.drain(..) {
@@ -352,7 +352,7 @@ impl State for Test {
             if let Some(data) = percept.get_data_for(card.card.clone()) {
                 if dragging.contains(&card.card) {
                     let mut pos = self.ren_to_world(&data.pos);
-                    for i in 0..2 {
+                    for i in 0..3 {
                         pos[i] = pos[i] + drag_offset[i];
                     }
                     transform.translation = pos;
