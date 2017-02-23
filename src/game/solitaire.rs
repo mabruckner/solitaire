@@ -258,7 +258,10 @@ impl Renderable for CardGamePercept {
                     };
                     Some(CardData {
                         pos: [(id.0).1 as f64, (id.0).0 as f64 - (idx as f64* 0.05), idx as f64 * 0.01],
-                        display: val.clone(),
+                        display: match val {
+                            &Some(ref crd) => CardDisplay::Front(crd.clone()),
+                            &None => CardDisplay::Back
+                        },
                         drag_children: if draggable { Some(children) } else { None }
                     })
                 } else {
@@ -267,7 +270,7 @@ impl Renderable for CardGamePercept {
             } else {
                 Some(CardData {
                     pos: [(id.0).1 as f64, (id.0).0 as f64, -0.01],
-                    display: None,
+                    display: CardDisplay::Empty,
                     drag_children: None
                 })
             }
@@ -279,7 +282,7 @@ impl Renderable for CardGamePercept {
         match act {
             MouseAction::Drop(dragged, (stack, _)) => {
                 if let Some(data) = self.get_data_for(dragged) {
-                    if let Some(crd) = data.display {
+                    if let CardDisplay::Front(crd) = data.display {
                         Some(CardGameAction::Move(crd, stack))
                     } else {
                         None

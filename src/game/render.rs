@@ -1,8 +1,15 @@
 use game::cards::Card;
 
+#[derive(Eq, PartialEq)]
+pub enum CardDisplay {
+    Front(Card),
+    Back,
+    Empty
+}
+
 pub struct CardData<CardId> {
     pub pos: [f64; 3],
-    pub display: Option<Card>,
+    pub display: CardDisplay,
     pub drag_children: Option<Vec<CardId>>
 }
 

@@ -43,6 +43,7 @@ use amethyst::specs::{
 use game::problem::Problem;
 use game::render::{
     MouseAction,
+    CardDisplay,
     Renderable as SRenderable
 };
 
@@ -65,8 +66,8 @@ impl System<()> for CameraSystem {
         let up = [0.0, 1.0, 0.0];
 
         let projection = Projection::Orthographic {
-            left: -10.0,// * aspect,
-            right: 10.0,// * aspect,
+            left: -10.0 * aspect,
+            right: 10.0 * aspect,
             bottom: -10.0,
             top: 10.0,
             near: -10.0,
@@ -108,9 +109,9 @@ impl System<()> for CardSystem {
     }
 }
 
-fn get_card_asset_id(card: Option<game::cards::Card>) -> String
+fn get_card_asset_id(card: CardDisplay) -> String
 {
-    if let Some(card) = card {
+    if let CardDisplay::Front(card) = card {
         let suit = match card.suit {
             0 => "spades",
             1 => "hearts",
@@ -125,8 +126,10 @@ fn get_card_asset_id(card: Option<game::cards::Card>) -> String
             x => format!("{}", x+1)
         };
         format!("cards/card_{}_{}", rank, suit)
-    } else {
+    } else if CardDisplay::Back == card {
         "white".to_string()
+    } else {
+        "gray".to_string()
     }
 }
 
@@ -304,10 +307,11 @@ impl State for Test {
         let deck = cmdline::deck();
         for crd in deck {
             println!("{:?}", crd);
-            asset_manager.load_asset::<Texture>(&get_card_asset_id(Some(crd)), "png").unwrap();
+            asset_manager.load_asset::<Texture>(&get_card_asset_id(CardDisplay::Front(crd)), "png").unwrap();
         }
         //asset_manager.load_asset::<Texture>("cards/card_10_roads", "png");
         asset_manager.load_asset_from_data::<Texture, [f32; 4]>("white", [1.0, 1.0, 1.0, 1.0]);
+        asset_manager.load_asset_from_data::<Texture, [f32; 4]>("gray", [0.5, 0.5, 0.5, 1.0]);
         asset_manager.load_asset_from_data::<Mesh, Vec<VertexPosNormal>>("tri",isoc(1.0,1.0));
         let tri = asset_manager.create_renderable("card", "cards/card_10_clubs", "white", "white", 1.0).unwrap();
         //asset_manager.load_asset_from_data::<Texture, [f32; 4]>("white", [1.0, 1.0, 1.0, 1.0]);
@@ -320,14 +324,11 @@ impl State for Test {
                         .with(Transform::default())
                         .build();
         }
-
-        world.create_now()
-            .with(tri)
-            .with(LocalTransform::default())
-            .with(Transform::default())
-            .build();
     }
     fn update(&mut self, world: &mut World, asset_manager: &mut AssetManager, _: &mut Pipeline) -> Trans {
+        if self.state.is_goal() {
+            return Trans::Quit;
+        }
         let percept = self.state.percept();
         let card_list = percept.get_cards();
         let (cards, mut transform, mut render) = (world.read::<CardThing>(), world.write::<LocalTransform>(), world.write::<Renderable>());
