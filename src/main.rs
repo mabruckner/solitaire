@@ -1,29 +1,31 @@
 extern crate rand;
 extern crate amethyst;
+extern crate cgmath;
 
 mod cmdline;
 mod game;
+mod raytrace;
 
+use amethyst::{
+    Application,
+    Event,
+    State,
+    Trans,
+    VirtualKeyCode,
+    WindowEvent,
+};
 use amethyst::asset_manager::{
     AssetManager,
     AssetReadStorage,
     DirectoryStore,
 };
 use amethyst::config::Element;
-use amethyst::ecs::components::rendering::{
+use amethyst::ecs::components::{
     Mesh,
     Texture,
     Renderable,
-};
-use amethyst::ecs::components::transform::{
     LocalTransform,
     Transform,
-};
-use amethyst::engine::{Application, State, Trans};
-use amethyst::event::{
-    Event,
-    VirtualKeyCode,
-    WindowEvent,
 };
 use amethyst::gfx_device::DisplayConfig;
 use amethyst::renderer::{
@@ -31,7 +33,7 @@ use amethyst::renderer::{
     Pipeline,
     VertexPosNormal,
 };
-use amethyst::specs::{
+use amethyst::ecs::{
     Component,
     Join,
     RunArg,
@@ -46,12 +48,16 @@ use game::render::{
     CardDisplay,
     Renderable as SRenderable
 };
+use game::grid::GridLocation;
 
-struct CameraSystem;
+struct CameraSystem<R:SRenderable>(std::marker::PhantomData<R>);
 
-impl System<()> for CameraSystem {
+impl <R:SRenderable + Send> System<()> for CameraSystem<R> {
     fn run(&mut self, arg: RunArg, _:()) {
-        use amethyst::ecs::resources::camera::{Camera, Projection};
+        let (low, high) = R::get_grid_extents();
+        let (low, high) = (ren_to_world(&low), ren_to_world(&high));
+        let mid = ((low[0]+high[0])/2.0, (low[1]+high[1])/2.0, (low[2]+high[2])/2.0);
+        use amethyst::ecs::resources::{Camera, Projection};
         use amethyst::ecs::resources::ScreenDimensions;
         let (mut camera, dimensions) = arg.fetch(|w| {
             (w.write_resource::<Camera>(), w.read_resource::<ScreenDimensions>())
@@ -61,8 +67,8 @@ impl System<()> for CameraSystem {
 
 
         let aspect = dimensions.aspect_ratio;
-        let eye = [5.0, 0.0, 1.0];
-        let target = [5.0, 0.0, 0.0];
+        let eye = [mid.0, mid.1, high[2]];
+        let target = [mid.0, mid.1, mid.2];
         let up = [0.0, 1.0, 0.0];
 
         let projection = Projection::Orthographic {
@@ -74,7 +80,7 @@ impl System<()> for CameraSystem {
             far: 10.0,
         };
 
-        camera.projection = projection;
+        camera.proj = projection;
         camera.eye = eye;
         camera.target = target;
         camera.up = up;
@@ -102,7 +108,7 @@ impl System<()> for CardSystem {
         });
         for (card, transform, render) in (&cards, &mut transform, &mut render).iter() {
             if let Some(data) = percept.get_data_for(card.card.clone()) {
-                transform.translation = [(data.pos[0] as f32)*2.5, (data.pos[1] as f32)*4.0, data.pos[2] as f32];
+                //transform.translation = [(data.pos[0] as f32)*2.5, (data.pos[1] as f32)*4.0, data.pos[2] as f32];
             }
         }
         ()
@@ -137,7 +143,12 @@ struct Test {
     state: game::solitaire::Solitaire,
     drag: Option<<game::solitaire::CardGamePercept as SRenderable>::CardId>,
     spacing: [f32; 3],
-    mouse: (f32, f32)
+    mouse: (f32, f32),
+    mouseray: raytrace::Ray
+}
+
+fn ren_to_world(pos: &GridLocation) -> [f32; 3] {
+    [pos.x.to_float(1.25, 0.25), pos.y.to_float(-1.875, -0.25), pos.sort as f32*0.001]
 }
 
 impl Test {
@@ -170,17 +181,15 @@ impl Test {
             self.refresh(asset_manager, world);
         }
     }
-    fn ren_to_world(&self, pos: &[f64; 3]) -> [f32; 3] {
-        [(pos[0] as f32)*self.spacing[0], (pos[1] as f32)*self.spacing[1], (pos[2] as f32)*self.spacing[2]]
-    }
     fn mouse_moved(&mut self, x: f32, y: f32, world: &mut World) {
-        use amethyst::ecs::resources::camera::{Camera, Projection};
+        use amethyst::ecs::resources::{Camera, Projection};
         use amethyst::ecs::resources::ScreenDimensions;
         let (camera, dimensions) = (world.read_resource::<Camera>(), world.read_resource::<ScreenDimensions>());
+        self.mouseray = raytrace::Ray::from_camera_mouse(raytrace::res_cam_to_ren(&camera), (dimensions.w, dimensions.h), (x as i32,y as i32));
         let x = x/dimensions.w;
         let y = y/dimensions.h;
 
-        match camera.projection {
+        match camera.proj {
             Projection::Orthographic{top: top, bottom: bottom, left: left, right:right, near:near, far:far} => {
                 let x = left + x*(right-left) + 5.0;
                 let y = bottom + y*(top-bottom);
@@ -196,11 +205,11 @@ impl Test {
                     let percept = self.state.percept();
                     let data = percept.get_data_for(card.clone()).unwrap();
                     if let Some(ref children) = data.drag_children {
-                        let base = self.ren_to_world(&data.pos);
+                        let base = ren_to_world(&data.pos);
                         let offset = [(x as f32)/10.0, (y as f32)/10.0, 0.0];
                         for (subject, mut transform) in (&world.read::<CardThing>(), &mut world.write::<LocalTransform>()).iter() {
                             if &subject.card == card || children.contains(&subject.card) {
-                                let mut local = self.ren_to_world(&percept.get_data_for(subject.card.clone()).unwrap().pos);
+                                let mut local = ren_to_world(&percept.get_data_for(subject.card.clone()).unwrap().pos);
                                 for i in 0..3 {
                                     local[i] = local[i] - base[i] + offset[i];
                                 }
@@ -210,7 +219,7 @@ impl Test {
                     }
                 }
             },
-            Event::MouseInput(state, amethyst::event::MouseButton::Left) => {
+            Event::MouseInput(state, amethyst::MouseButton::Left) => {
                 let mut ignore = Vec::new();
                 if let Some(card) = self.drag.clone() {
                     ignore.push(card.clone());
@@ -222,13 +231,17 @@ impl Test {
                 }
                 let mut target = None;
                 let (width, height) = (2.25, 3.5);
-                for (subject, mut transform) in (&world.read::<CardThing>(), &mut world.write::<LocalTransform>()).iter() {
+                let cardshape = raytrace::Box::new(width, height, 0.001);
+                println!("{:?}", self.mouseray);
+                for (subject, transform, local) in (&world.read::<CardThing>(), &world.read::<Transform>(), &world.read::<LocalTransform>()).iter() {
                     if ignore.contains(&subject.card) {
                         continue;
                     }
-                    if self.mouse.0 <= transform.translation[0] + width/2.0 && self.mouse.0 >= transform.translation[0] - width/2.0 &&
-                       self.mouse.1 <= transform.translation[1] + height/2.0 && self.mouse.1 >= transform.translation[1] - height/2.0 {
-                        let thing = (transform.translation[2], subject.card.clone());
+                    let ray = self.mouseray.reverse_transform(transform.0);
+                    println!("{:?}", ray);
+                    use raytrace::Raytraceable;
+                    if cardshape.raytrace(&ray).is_some() {
+                        let thing = (local.translation[2], subject.card.clone());
                         if let Some((x, _)) = target {
                             if x < thing.0 {
                                 target = Some(thing);
@@ -241,7 +254,7 @@ impl Test {
                 println!("{:?}", target);
                 if let Some((_,target)) = target {
                     let percept = self.state.percept();
-                    if state == amethyst::event::ElementState::Pressed {
+                    if state == amethyst::ElementState::Pressed {
                         if percept.get_data_for(target.clone()).unwrap().drag_children.is_some() {
                             self.drag = Some(target);
                         }
@@ -255,7 +268,7 @@ impl Test {
                         }
                     }
                 }
-                if state == amethyst::event::ElementState::Released {
+                if state == amethyst::ElementState::Released {
                     self.drag = None
                 }
             },
@@ -272,7 +285,7 @@ impl State for Test {
                                     DrawFlat::new("main", "main")]);
         pipe.layers.push(layer);
         {
-            use amethyst::ecs::resources::camera::{Camera, Projection};
+            use amethyst::ecs::resources::{Camera, Projection};
             use amethyst::ecs::resources::ScreenDimensions;
 
             let dimensions = world.read_resource::<ScreenDimensions>();
@@ -291,7 +304,7 @@ impl State for Test {
                 far: 40.0,
             };
 
-            camera.projection = projection;
+            camera.proj = projection;
             camera.eye = eye;
             camera.target = target;
             camera.up = up;
@@ -338,8 +351,9 @@ impl State for Test {
         if let Some(card) = self.drag.clone() {
             dragging.push(card.clone());
             let mut data = percept.get_data_for(card).unwrap();
-            let pos = self.ren_to_world(&data.pos);
-            let mouse = [self.mouse.0, self.mouse.1, 1.0];
+            let pos = ren_to_world(&data.pos);
+            let mut mouse = self.mouseray.along(0.1);
+            mouse[2] = 1.0;
             for i in 0..3 {
                 drag_offset[i] = mouse[i] - pos[i];
             }
@@ -352,13 +366,13 @@ impl State for Test {
         for (card, transform, render) in (&cards, &mut transform, &mut render).iter() {
             if let Some(data) = percept.get_data_for(card.card.clone()) {
                 if dragging.contains(&card.card) {
-                    let mut pos = self.ren_to_world(&data.pos);
+                    let mut pos = ren_to_world(&data.pos);
                     for i in 0..3 {
                         pos[i] = pos[i] + drag_offset[i];
                     }
                     transform.translation = pos;
                 } else {
-                    transform.translation = self.ren_to_world(&data.pos);
+                    transform.translation = ren_to_world(&data.pos);
                 }
                 if let Some(id) = asset_manager.id_from_name(&get_card_asset_id(data.display)) {
                     if let Some(tex) = textures.read(id) {
@@ -392,11 +406,15 @@ fn main(){
         state: cmdline::deal_with_it(),
         drag: None,
         spacing: [2.5, 4.5, 1.0],
-        mouse: (0.0, 0.0)
+        mouse: (0.0, 0.0),
+        mouseray: raytrace::Ray {
+            start: [0.0,0.0,0.0],
+            velocity: [0.0,0.0,1.0]
+        }
     };
     let mut game = Application::build(initial, display_config)
         .register::<CardThing>()
-        .with(CameraSystem, "aspect", 10)
+        .with::<CameraSystem<game::solitaire::CardGamePercept>>(CameraSystem(std::marker::PhantomData), "aspect", 10)
         //.with(CardSystem { state: cmdline::deal_with_it() }, "cards", 1)
         .done();
     game.run();

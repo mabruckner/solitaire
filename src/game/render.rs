@@ -1,4 +1,5 @@
 use game::cards::Card;
+use game::grid::GridLocation;
 
 #[derive(Eq, PartialEq)]
 pub enum CardDisplay {
@@ -8,7 +9,7 @@ pub enum CardDisplay {
 }
 
 pub struct CardData<CardId> {
-    pub pos: [f64; 3],
+    pub pos: GridLocation,
     pub display: CardDisplay,
     pub drag_children: Option<Vec<CardId>>
 }
@@ -24,4 +25,5 @@ pub trait Renderable {
     fn get_cards(&self) -> Vec<Self::CardId>;
     fn get_data_for(&self, id: Self::CardId) -> Option<CardData<Self::CardId>>;
     fn get_action_for(&self, act: MouseAction<Self::CardId>) -> Option<Self::Action>;
+    fn get_grid_extents() -> (GridLocation, GridLocation);
 }

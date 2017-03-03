@@ -3,6 +3,7 @@ use std::mem;
 pub use game::cards::Card;
 use game::problem::Problem;
 use game::render::*;
+use game::grid::*;
 
 impl Card {
     pub fn new(suit: usize, color:usize, rank: usize) -> Card {
@@ -229,6 +230,14 @@ pub struct CardGamePercept {
     pub stacks: HashMap<StackId,Vec<Option<Card>>>
 }
 
+fn get_stack_location(&StackId(i, j): &StackId) -> GridLocation {
+    match i {
+        0 => GridLocation::new(GridValue(j as i32*2, 0), GridValue(0, 0), 0),
+        1 => GridLocation::new(GridValue(j as i32*2, 0), GridValue(2, 0), 0),
+        2 | _ => GridLocation::new(GridValue(j as i32*2+5, 0), GridValue(0, 0), 0),
+    }
+}
+
 impl Renderable for CardGamePercept {
     type CardId = (StackId, Option<usize>);
     type Action = CardGameAction;
@@ -247,17 +256,38 @@ impl Renderable for CardGamePercept {
             if let Some(idx) = id.1 {
                 if let Some(val) = stack.get(idx) {
                     let mut children = Vec::new();
-                    if val.is_some() && (id.0).0 == 1 {
-                        for i in (idx+1)..stack.len() {
-                            children.push((id.0.clone(), Some(i)));
+                    let mut offset = GridLocation::new(GridValue(0,0), GridValue(0,0), idx as i32);
+                    if (id.0).0 == 1 {
+                        if val.is_some() {
+                            for i in (idx+1)..stack.len() {
+                                children.push((id.0.clone(), Some(i)));
+                            }
                         }
+                        let mut count = 0;
+                        for i in 0..idx {
+                            if stack[i].is_none() {
+                                count = count +1;
+                            } else {
+                                count = count + 2;
+                            }
+                        }
+                        offset.y = GridValue(0, count);
                     }
                     let draggable = children.len() > 0 || match id.0 {
                         StackId(0,1) | StackId(1, _) => idx == stack.len() - 1,
                         _ => false
                     };
+                    if id.0 == StackId(0,1) {
+                        let mut start = stack.len() as i32 - 3;
+                        if start < 0 {
+                            start = 0;
+                        }
+                        if idx as i32 > start {
+                            offset.x = GridValue(0, (idx as i32 - start)*2);
+                        }
+                    }
                     Some(CardData {
-                        pos: [(id.0).1 as f64, (id.0).0 as f64 - (idx as f64* 0.05), idx as f64 * 0.01],
+                        pos: get_stack_location(&id.0) + offset,
                         display: match val {
                             &Some(ref crd) => CardDisplay::Front(crd.clone()),
                             &None => CardDisplay::Back
@@ -269,7 +299,7 @@ impl Renderable for CardGamePercept {
                 }
             } else {
                 Some(CardData {
-                    pos: [(id.0).1 as f64, (id.0).0 as f64, -0.01],
+                    pos: get_stack_location(&id.0) - GridLocation::new(GridValue(0,0), GridValue(0,0), 1),
                     display: CardDisplay::Empty,
                     drag_children: None
                 })
@@ -295,6 +325,9 @@ impl Renderable for CardGamePercept {
                 Some(CardGameAction::Tap(stack))
             }
         }
+    }
+    fn get_grid_extents() -> (GridLocation, GridLocation) {
+        (GridLocation::new(GridValue(-1,0), GridValue(-1,0), -1), GridLocation::new(GridValue(13,0), GridValue(3, 32), 20))
     }
 }
 
