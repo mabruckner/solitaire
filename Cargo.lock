@@ -2,7 +2,7 @@
 name = "solitaire"
 version = "0.1.0"
 dependencies = [
- "amethyst 0.4.1 (git+https://github.com/mabruckner/amethyst.git?branch=develop)",
+ "amethyst 0.4.1 (git+https://github.com/amethyst/amethyst.git?branch=release-0.4)",
  "cgmath 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -10,10 +10,10 @@ dependencies = [
 [[package]]
 name = "amethyst"
 version = "0.4.1"
-source = "git+https://github.com/mabruckner/amethyst.git?branch=develop#cf6510ec0dfbc9741d17d48b1866bc6a7e46e95c"
+source = "git+https://github.com/amethyst/amethyst.git?branch=release-0.4#21176327936d85d09c5351d4d9ce399b592facf6"
 dependencies = [
- "amethyst_config 0.2.1 (git+https://github.com/mabruckner/amethyst.git?branch=develop)",
- "amethyst_renderer 0.4.1 (git+https://github.com/mabruckner/amethyst.git?branch=develop)",
+ "amethyst_config 0.2.1 (git+https://github.com/amethyst/amethyst.git?branch=release-0.4)",
+ "amethyst_renderer 0.4.1 (git+https://github.com/amethyst/amethyst.git?branch=release-0.4)",
  "cgmath 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "dds-rs 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "genmesh 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -32,7 +32,7 @@ dependencies = [
 [[package]]
 name = "amethyst_config"
 version = "0.2.1"
-source = "git+https://github.com/mabruckner/amethyst.git?branch=develop#cf6510ec0dfbc9741d17d48b1866bc6a7e46e95c"
+source = "git+https://github.com/amethyst/amethyst.git?branch=release-0.4#21176327936d85d09c5351d4d9ce399b592facf6"
 dependencies = [
  "yaml-rust 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -40,7 +40,7 @@ dependencies = [
 [[package]]
 name = "amethyst_renderer"
 version = "0.4.1"
-source = "git+https://github.com/mabruckner/amethyst.git?branch=develop#cf6510ec0dfbc9741d17d48b1866bc6a7e46e95c"
+source = "git+https://github.com/amethyst/amethyst.git?branch=release-0.4#21176327936d85d09c5351d4d9ce399b592facf6"
 dependencies = [
  "cgmath 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "gfx 0.14.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -902,9 +902,9 @@ version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [metadata]
-"checksum amethyst 0.4.1 (git+https://github.com/mabruckner/amethyst.git?branch=develop)" = "<none>"
-"checksum amethyst_config 0.2.1 (git+https://github.com/mabruckner/amethyst.git?branch=develop)" = "<none>"
-"checksum amethyst_renderer 0.4.1 (git+https://github.com/mabruckner/amethyst.git?branch=develop)" = "<none>"
+"checksum amethyst 0.4.1 (git+https://github.com/amethyst/amethyst.git?branch=release-0.4)" = "<none>"
+"checksum amethyst_config 0.2.1 (git+https://github.com/amethyst/amethyst.git?branch=release-0.4)" = "<none>"
+"checksum amethyst_renderer 0.4.1 (git+https://github.com/amethyst/amethyst.git?branch=release-0.4)" = "<none>"
 "checksum android_glue 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "7e2b80445d331077679dfc6f3014f3e9ab7083e588423d35041d3fc017198189"
 "checksum approx 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "08abcc3b4e9339e33a3d0a5ed15d84a687350c05689d825e0f6655eef9e76a94"
 "checksum atom 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)" = "4cd7b80cba09d9c6679f5ac66af2e5eb9c17fa1b914f142d690b069ba51eacaf"
