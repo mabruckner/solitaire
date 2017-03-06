@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::mem;
-pub use game::cards::Card;
+pub use game::cards::*;
 use game::problem::Problem;
 use game::render::*;
 use game::grid::*;
@@ -75,34 +75,38 @@ impl Solitaire {
     }
 }
 
+fn sol_card_to_ident(card: &Card) -> Ident {
+    Ident::new(card.suit*16 + card.rank)
+}
+
 impl Problem<CardGameAction, CardGamePercept> for Solitaire {
     fn percept(&self) -> CardGamePercept {
         let mut map = HashMap::new();
         let mut deck = Vec::new();
         let mut runoff = Vec::new();
-        for _ in &self.deck {
-            deck.push(None);
+        for x in &self.deck {
+            deck.push((sol_card_to_ident(x),None));
         }
         map.insert(StackId(0,0),deck);
         for x in &self.runoff {
-            runoff.push(Some(x.clone()));
+            runoff.push((sol_card_to_ident(x),Some(x.clone())));
         }
         map.insert(StackId(0,1),runoff);
         for (i, stack) in self.row.iter().enumerate() {
             let mut thing = Vec::new();
             for (j, crd) in stack.iter().enumerate() {
-                thing.push(if j < self.visibility[i] {
+                thing.push((sol_card_to_ident(crd),if j < self.visibility[i] {
                     None
                 } else {
                     Some(crd.clone())
-                });
+                }));
             }
             map.insert(StackId(1,i),thing);
         }
         for (i, stack) in self.goal.iter().enumerate() {
             let mut thing = Vec::new();
             for crd in stack {
-                thing.push(Some(crd.clone()));
+                thing.push((sol_card_to_ident(crd),Some(crd.clone())));
             }
             map.insert(StackId(2,i),thing);
         }
@@ -227,7 +231,7 @@ pub enum CardGameAction {
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct CardGamePercept {
-    pub stacks: HashMap<StackId,Vec<Option<Card>>>
+    pub stacks: HashMap<StackId,Vec<(Ident,Option<Card>)>>
 }
 
 fn get_stack_location(&StackId(i, j): &StackId) -> GridLocation {
@@ -237,6 +241,7 @@ fn get_stack_location(&StackId(i, j): &StackId) -> GridLocation {
         2 | _ => GridLocation::new(GridValue(j as i32*2+5, 0), GridValue(0, 0), 0),
     }
 }
+
 
 impl Renderable for CardGamePercept {
     type CardId = (StackId, Option<usize>);
@@ -254,7 +259,7 @@ impl Renderable for CardGamePercept {
     fn get_data_for(&self, id: Self::CardId) -> Option<CardData<Self::CardId>> {
         if let Some(stack) = self.stacks.get(&id.0) {
             if let Some(idx) = id.1 {
-                if let Some(val) = stack.get(idx) {
+                if let Some(&(ref ident,ref val)) = stack.get(idx) {
                     let mut children = Vec::new();
                     let mut offset = GridLocation::new(GridValue(0,0), GridValue(0,0), idx as i32);
                     if (id.0).0 == 1 {
@@ -265,7 +270,7 @@ impl Renderable for CardGamePercept {
                         }
                         let mut count = 0;
                         for i in 0..idx {
-                            if stack[i].is_none() {
+                            if stack[i].1.is_none() {
                                 count = count +1;
                             } else {
                                 count = count + 2;
@@ -287,6 +292,7 @@ impl Renderable for CardGamePercept {
                         }
                     }
                     Some(CardData {
+                        ident: ident.expand(),
                         pos: get_stack_location(&id.0) + offset,
                         display: match val {
                             &Some(ref crd) => CardDisplay::Front(crd.clone()),
@@ -299,6 +305,7 @@ impl Renderable for CardGamePercept {
                 }
             } else {
                 Some(CardData {
+                    ident: Ident::new((id.0).0*16 +(id.0).1).interleave(),
                     pos: get_stack_location(&id.0) - GridLocation::new(GridValue(0,0), GridValue(0,0), 1),
                     display: CardDisplay::Empty,
                     drag_children: None

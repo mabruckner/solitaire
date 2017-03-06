@@ -1,4 +1,5 @@
 use game::cards::Card;
+use game::cards::Ident;
 use game::grid::GridLocation;
 
 #[derive(Eq, PartialEq)]
@@ -9,6 +10,7 @@ pub enum CardDisplay {
 }
 
 pub struct CardData<CardId> {
+    pub ident: Ident,
     pub pos: GridLocation,
     pub display: CardDisplay,
     pub drag_children: Option<Vec<CardId>>

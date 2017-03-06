@@ -1,13 +1,13 @@
 //mod game;
 use rand;
 use rand::Rng;
-use game::cards::Card;
+use game::cards::*;
 use game::solitaire::{StackId, CardGamePercept, Solitaire};
 use game::problem::Problem;
 use std::char;
 use std;
 
-fn card_str(card: &Option<Card>) -> String {
+fn card_str(&(_, ref card): &(Ident, Option<Card>)) -> String {
     match card {
         &Some(ref card) => {
             let suit = match card.suit {
@@ -35,7 +35,7 @@ fn print_percept(p: &CardGamePercept) {
     let runoff = p.stacks.get(&StackId(0,1)).unwrap();
 
     if let Some(card) = deck.last() {
-        print!("{} ", card_str(&None));
+        print!("{} ", card_str(&(Ident::new(0),None)));
     } else {
         print!("    ");
     }

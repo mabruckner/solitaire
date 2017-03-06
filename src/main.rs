@@ -5,6 +5,7 @@ extern crate cgmath;
 mod cmdline;
 mod game;
 mod raytrace;
+mod springy;
 
 use amethyst::{
     Application,
@@ -50,6 +51,8 @@ use game::render::{
 };
 use game::grid::GridLocation;
 
+use std::collections::HashMap;
+
 struct CameraSystem<R:SRenderable>(std::marker::PhantomData<R>);
 
 impl <R:SRenderable + Send> System<()> for CameraSystem<R> {
@@ -93,6 +96,14 @@ struct CardThing {
 
 impl Component for CardThing {
     type Storage = VecStorage<CardThing>;
+}
+
+struct Ident {
+    id: game::cards::Ident
+}
+
+impl Component for Ident {
+    type Storage = VecStorage<Ident>;
 }
 
 struct CardSystem {
@@ -153,23 +164,17 @@ fn ren_to_world(pos: &GridLocation) -> [f32; 3] {
 
 impl Test {
     fn refresh(&mut self, asset_manager: &mut AssetManager, world: &mut World) {
-        {
-            let cards = world.read::<CardThing>();
-            for ent in world.entities().iter() {
-                if cards.get(ent).is_some() {
-                    world.delete_later(ent);
-                }
+        let mut map = HashMap::new();
+        let percept = self.state.percept();
+        for card in self.state.percept().get_cards() {
+            if let Some(data) = percept.get_data_for(card.clone()) {
+                map.insert(data.ident, card);
             }
         }
-        let cardbase = asset_manager.create_renderable("card", "cards/card_10_roads", "white", "white", 1.0).unwrap();
-
-        for card in self.state.percept().get_cards() {
-            world.create_now()
-                .with(cardbase.clone())
-                .with(CardThing{ card: card.clone()})
-                .with(LocalTransform::default())
-                .with(Transform::default())
-                .build();
+        for (ident, card) in (&world.read::<Ident>(), &mut world.write::<CardThing>()).iter() {
+            if let Some(thing) = map.get(&ident.id) {
+                card.card = thing.clone();
+            }
         }
 
     }
@@ -329,11 +334,15 @@ impl State for Test {
         let tri = asset_manager.create_renderable("card", "cards/card_10_clubs", "white", "white", 1.0).unwrap();
         //asset_manager.load_asset_from_data::<Texture, [f32; 4]>("white", [1.0, 1.0, 1.0, 1.0]);
         
-        for card in self.state.percept().get_cards() {
+        let percept = self.state.percept();
+        for card in percept.get_cards() {
+            let data = percept.get_data_for(card.clone()).unwrap();
                     world.create_now()
                         .with(tri.clone())
                         .with(CardThing{ card: card.clone()})
+                        .with(Ident{id:data.ident})
                         .with(LocalTransform::default())
+                        .with(springy::MoveTarget{pos:[0.0;3]})
                         .with(Transform::default())
                         .build();
         }
@@ -344,7 +353,7 @@ impl State for Test {
         }
         let percept = self.state.percept();
         let card_list = percept.get_cards();
-        let (cards, mut transform, mut render) = (world.read::<CardThing>(), world.write::<LocalTransform>(), world.write::<Renderable>());
+        let (cards, mut target, mut render) = (world.read::<CardThing>(), world.write::<springy::MoveTarget>(), world.write::<Renderable>());
         let textures = asset_manager.read_assets::<Texture>();
         let mut drag_offset = [0.0; 3];
         let mut dragging = Vec::new();
@@ -363,16 +372,16 @@ impl State for Test {
                 }
             }
         }
-        for (card, transform, render) in (&cards, &mut transform, &mut render).iter() {
+        for (card, target, render) in (&cards, &mut target, &mut render).iter() {
             if let Some(data) = percept.get_data_for(card.card.clone()) {
                 if dragging.contains(&card.card) {
                     let mut pos = ren_to_world(&data.pos);
                     for i in 0..3 {
                         pos[i] = pos[i] + drag_offset[i];
                     }
-                    transform.translation = pos;
+                    target.pos = pos;
                 } else {
-                    transform.translation = ren_to_world(&data.pos);
+                    target.pos = ren_to_world(&data.pos);
                 }
                 if let Some(id) = asset_manager.id_from_name(&get_card_asset_id(data.display)) {
                     if let Some(tex) = textures.read(id) {
@@ -414,7 +423,10 @@ fn main(){
     };
     let mut game = Application::build(initial, display_config)
         .register::<CardThing>()
+        .register::<springy::MoveTarget>()
+        .register::<Ident>()
         .with::<CameraSystem<game::solitaire::CardGamePercept>>(CameraSystem(std::marker::PhantomData), "aspect", 10)
+        .with::<springy::MoveSystem>(springy::MoveSystem{vel:50.0}, "movement", 10)
         //.with(CardSystem { state: cmdline::deal_with_it() }, "cards", 1)
         .done();
     game.run();
