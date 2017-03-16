@@ -87,13 +87,11 @@ impl Raytraceable for Box {
                 (offset - span, offset + span)
             }
         }
-        println!("here? {:?}", ray);
         let mut range = (f32::NEG_INFINITY, f32::INFINITY);
         for i in 0..3 {
             range.0 = results[i].0.max(range.0);
             range.1 = results[i].1.min(range.1);
         }
-        println!("range:{:?}", range);
         if range.0 > range.1 {
             None
         } else {

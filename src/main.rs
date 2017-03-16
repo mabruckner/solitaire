@@ -40,6 +40,7 @@ use amethyst::ecs::{
     RunArg,
     System,
     VecStorage,
+    HashMapStorage,
     World,
 };
 
@@ -62,8 +63,8 @@ impl <R:SRenderable + Send> System<()> for CameraSystem<R> {
         let mid = ((low[0]+high[0])/2.0, (low[1]+high[1])/2.0, (low[2]+high[2])/2.0);
         use amethyst::ecs::resources::{Camera, Projection};
         use amethyst::ecs::resources::ScreenDimensions;
-        let (mut camera, dimensions) = arg.fetch(|w| {
-            (w.write_resource::<Camera>(), w.read_resource::<ScreenDimensions>())
+        let (mut camera, dimensions, background, mut transforms) = arg.fetch(|w| {
+            (w.write_resource::<Camera>(), w.read_resource::<ScreenDimensions>(), w.read::<Background>(), w.write::<LocalTransform>())
         });
 
         //println!("{},{}", dimensions.w, dimensions.h);
@@ -87,6 +88,10 @@ impl <R:SRenderable + Send> System<()> for CameraSystem<R> {
         camera.eye = eye;
         camera.target = target;
         camera.up = up;
+
+        for (_, transform) in (&background, &mut transforms).iter() {
+            transform.translation = [mid.0, mid.1, low[2]];
+        }
     }
 }
 
@@ -96,6 +101,12 @@ struct CardThing {
 
 impl Component for CardThing {
     type Storage = VecStorage<CardThing>;
+}
+
+struct Background;
+
+impl Component for Background {
+    type Storage = HashMapStorage<Background>;
 }
 
 struct Ident {
@@ -237,13 +248,11 @@ impl Test {
                 let mut target = None;
                 let (width, height) = (2.25, 3.5);
                 let cardshape = raytrace::Box::new(width, height, 0.001);
-                println!("{:?}", self.mouseray);
                 for (subject, transform, local) in (&world.read::<CardThing>(), &world.read::<Transform>(), &world.read::<LocalTransform>()).iter() {
                     if ignore.contains(&subject.card) {
                         continue;
                     }
                     let ray = self.mouseray.reverse_transform(transform.0);
-                    println!("{:?}", ray);
                     use raytrace::Raytraceable;
                     if cardshape.raytrace(&ray).is_some() {
                         let thing = (local.translation[2], subject.card.clone());
@@ -278,6 +287,23 @@ impl Test {
                 }
             },
             _ => ()
+        }
+    }
+    fn mush(&mut self) {
+        let mut done = false;
+        while !done {
+            let acts = self.state.actions();
+            done = true;
+            for a in acts {
+                match a {
+                    game::solitaire::CardGameAction::Move(_, game::solitaire::StackId(2, _)) => {
+                        self.state = self.state.result(a);
+                        done = false;
+                        break;
+                    },
+                    _ => ()
+                }
+            }
         }
     }
 }
@@ -321,6 +347,7 @@ impl State for Test {
         asset_manager.load_asset::<Mesh>("thick_card", "obj");
         asset_manager.load_asset::<Mesh>("cube", "obj");
         asset_manager.load_asset::<Texture>("amethyst_thumb", "png");
+        asset_manager.load_asset::<Texture>("felt", "png");
 
         let deck = cmdline::deck();
         for crd in deck {
@@ -329,12 +356,21 @@ impl State for Test {
         }
         //asset_manager.load_asset::<Texture>("cards/card_10_roads", "png");
         asset_manager.load_asset_from_data::<Texture, [f32; 4]>("white", [1.0, 1.0, 1.0, 1.0]);
+        asset_manager.load_asset_from_data::<Texture, [f32; 4]>("felt_green", [0.1, 1.0, 0.2, 1.0]);
         asset_manager.load_asset_from_data::<Texture, [f32; 4]>("gray", [0.5, 0.5, 0.5, 1.0]);
         asset_manager.load_asset_from_data::<Mesh, Vec<VertexPosNormal>>("tri",isoc(1.0,1.0));
+        asset_manager.load_asset_from_data::<Mesh, Vec<VertexPosNormal>>("tex10",tile_rect(8.0,10));
         let tri = asset_manager.create_renderable("card", "cards/card_10_clubs", "white", "white", 1.0).unwrap();
+        let plane = asset_manager.create_renderable("tex10", "felt", "white", "felt_green", 1.0).unwrap();
         //asset_manager.load_asset_from_data::<Texture, [f32; 4]>("white", [1.0, 1.0, 1.0, 1.0]);
         
         let percept = self.state.percept();
+        world.create_now()
+            .with(plane.clone())
+            .with(LocalTransform::default())
+            .with(Transform::default())
+            .with(Background)
+            .build();
         for card in percept.get_cards() {
             let data = percept.get_data_for(card.clone()).unwrap();
                     world.create_now()
@@ -392,11 +428,15 @@ impl State for Test {
         }
         Trans::None
     }
-    fn handle_events(&mut self, events: &[WindowEvent], world: &mut World, asset_manager: &mut AssetManager, _: &mut Pipeline) -> Trans {
+    fn handle_events(&mut self, events: &[WindowEvent], world: &mut World, asset_manager: &mut AssetManager, pipe: &mut Pipeline) -> Trans {
         for event in events {
             match event.payload {
                 Event::Closed | Event::KeyboardInput(_, _, Some(VirtualKeyCode::Escape)) => {
                     return Trans::Quit;
+                },
+                Event::KeyboardInput(_, _, Some(VirtualKeyCode::Space)) => {
+                    self.mush();
+                    self.refresh(asset_manager, world);
                 },
                 Event::MouseMoved(x, y) => self.mouse_moved(x as f32, y as f32, world),
                 Event::MouseInput(_, _) => self.mouse_event(event.payload.clone(), asset_manager, world),
@@ -425,6 +465,7 @@ fn main(){
         .register::<CardThing>()
         .register::<springy::MoveTarget>()
         .register::<Ident>()
+        .register::<Background>()
         .with::<CameraSystem<game::solitaire::CardGamePercept>>(CameraSystem(std::marker::PhantomData), "aspect", 10)
         .with::<springy::MoveSystem>(springy::MoveSystem{vel:50.0}, "movement", 10)
         //.with(CardSystem { state: cmdline::deal_with_it() }, "cards", 1)
@@ -432,6 +473,48 @@ fn main(){
     game.run();
     println!("FINISHED");
 }
+
+fn tile_rect(scale: f32, num: usize) -> Vec<VertexPosNormal> {
+    let mut out = Vec::new();
+    let offset = scale*(num as f32)/2.0;
+    for i in 0..num {
+        for j in 0..num {
+            let (x,y) = (i as f32*scale-offset, j as f32*scale-offset);
+            out.push(VertexPosNormal{
+                pos:[x, y, 0.0],
+                normal:[0.0, 0.0, 1.0],
+                tex_coord:[0.0,0.0]
+            });
+            out.push(VertexPosNormal{
+                pos:[x+scale, y, 0.0],
+                normal:[0.0, 0.0, 1.0],
+                tex_coord:[1.0,0.0]
+            });
+            out.push(VertexPosNormal{
+                pos:[x+scale, y+scale, 0.0],
+                normal:[0.0, 0.0, 1.0],
+                tex_coord:[1.0,1.0]
+            });
+            out.push(VertexPosNormal{
+                pos:[x, y, 0.0],
+                normal:[0.0, 0.0, 1.0],
+                tex_coord:[0.0,0.0]
+            });
+            out.push(VertexPosNormal{
+                pos:[x+scale, y+scale, 0.0],
+                normal:[0.0, 0.0, 1.0],
+                tex_coord:[1.0,1.0]
+            });
+            out.push(VertexPosNormal{
+                pos:[x, y+scale, 0.0],
+                normal:[0.0, 0.0, 1.0],
+                tex_coord:[0.0,1.0]
+            });
+        }
+    }
+    out
+}
+
 
 fn isoc(w:f32,h:f32) -> Vec<VertexPosNormal> {
     vec![
